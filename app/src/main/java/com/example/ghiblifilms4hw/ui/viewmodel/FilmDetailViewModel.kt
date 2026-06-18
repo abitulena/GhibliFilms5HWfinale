@@ -31,24 +31,41 @@ class FilmDetailViewModel @Inject constructor(
     fun loadFilmDetail() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            _uiState.value = FilmDetailUiState.Loading
 
-            val filmFromDb = repository.getFilmById(filmId)
-            if (filmFromDb != null) {
-                _uiState.value = FilmDetailUiState.Success(filmFromDb)
-            } else {
-                val filmFromApi = repository.getFilmFromApiById(filmId)
-                if (filmFromApi != null) {
-                    repository.saveFilmToCache(filmFromApi)
-                    val savedFilm = repository.getFilmById(filmId)
-                    if (savedFilm != null) {
-                        _uiState.value = FilmDetailUiState.Success(savedFilm)
-                    } else {
-                        _uiState.value = FilmDetailUiState.Error("Failed to save film")
-                    }
+            try {
+                _uiState.value = FilmDetailUiState.Loading
+                val filmFromDb = repository.getFilmById(filmId)
+                if (filmFromDb != null) {
+                    _uiState.value =
+                        FilmDetailUiState.Success(filmFromDb)
                 } else {
-                    _uiState.value = FilmDetailUiState.Error("Film not found")
+                    val filmFromApi =
+                        repository.getFilmFromApiById(filmId)
+                    if (filmFromApi != null) {
+                        repository.saveFilmToCache(filmFromApi)
+                        val savedFilm =
+                            repository.getFilmById(filmId)
+                        if (savedFilm != null) {
+                            _uiState.value =
+                                FilmDetailUiState.Success(savedFilm)
+                        } else {
+                            _uiState.value =
+                                FilmDetailUiState.Error(
+                                    "Failed to save film"
+                                )
+                        }
+                    } else {
+                        _uiState.value =
+                            FilmDetailUiState.Error(
+                                "Film not found"
+                            )
+                    }
                 }
+            } catch (e: Exception) {
+                _uiState.value =
+                    FilmDetailUiState.Error(
+                        e.message ?: "Unknown error"
+                    )
             }
         }
     }

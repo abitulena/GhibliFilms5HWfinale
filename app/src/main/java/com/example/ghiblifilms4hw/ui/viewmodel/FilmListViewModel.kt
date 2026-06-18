@@ -67,8 +67,8 @@ class FilmListViewModel @Inject constructor(
             )
         }
     }
-
     fun retry() {
+        _uiState.value = FilmListUiState.Loading
         refreshIfNeeded()
     }
 

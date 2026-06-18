@@ -8,6 +8,7 @@ import io.mockk.MockKAnnotations
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.impl.annotations.MockK
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -36,17 +37,22 @@ class FilmListViewModelTest {
     fun setup() {
         MockKAnnotations.init(this)
     }
-
     @Test
-    fun initialStateShouldBeLoading() = runTest {
+    fun initialStateShouldBeLoadingBeforeCoroutinesRun() = runTest {
         coEvery { repository.getAllFilms() } returns flowOf(emptyList())
         coEvery { repository.refreshFilms() } returns Result.success(Unit)
-
         viewModel = FilmListViewModel(repository)
+        assertTrue(
+            "State must be Loading immediately after construction, before coroutines run",
+            viewModel.uiState.value is FilmListUiState.Loading
+        )
 
-        assertTrue(viewModel.uiState.value is FilmListUiState.Loading)
+        advanceUntilIdle()
+        assertFalse(
+            "State must change from Loading after coroutines complete",
+            viewModel.uiState.value is FilmListUiState.Loading
+        )
     }
-
     @Test
     fun successfulDataLoadingShouldResultInSuccessState() = runTest {
         coEvery { repository.getAllFilms() } returns flowOf(sampleFilms)
@@ -64,7 +70,7 @@ class FilmListViewModelTest {
     }
 
     @Test
-    fun errorLoadingDataShouldResultInErrorState() = runTest {
+    fun networkErrorWithEmptyDatabaseShouldResultInErrorState() = runTest {
         coEvery { repository.getAllFilms() } returns flowOf(emptyList())
         coEvery { repository.refreshFilms() } returns Result.failure(IOException("Network error"))
 
@@ -72,7 +78,52 @@ class FilmListViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertTrue(state is FilmListUiState.Error)
+        assertTrue(
+            "Expected Error state but was ${state::class.simpleName}",
+            state is FilmListUiState.Error
+        )
+        assertEquals("Network error", (state as FilmListUiState.Error).message)
+    }
+
+    @Test
+    fun emptyDatabaseWithSuccessfulRefreshShouldResultInEmptyState() = runTest {
+        coEvery { repository.getAllFilms() } returns flowOf(emptyList())
+        coEvery { repository.refreshFilms() } returns Result.success(Unit)
+
+        viewModel = FilmListViewModel(repository)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(
+            "Expected Empty state but was ${state::class.simpleName}",
+            state is FilmListUiState.Empty
+        )
+        assertFalse(
+            "Empty DB must not produce Success state",
+            state is FilmListUiState.Success
+        )
+    }
+
+    @Test
+    fun searchWithNoMatchesShouldKeepSuccessStateWithEmptyFilteredList() = runTest {
+        coEvery { repository.getAllFilms() } returns flowOf(sampleFilms)
+        coEvery { repository.refreshFilms() } returns Result.success(Unit)
+
+        viewModel = FilmListViewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.updateSearchQuery("NonExistentFilm")
+
+        val state = viewModel.uiState.value
+        assertTrue(
+            "State should remain Success when filter finds nothing (films are in DB, just filtered out)",
+            state is FilmListUiState.Success
+        )
+        val successState = state as FilmListUiState.Success
+        assertFalse("hasFilteredResults should be false", successState.hasFilteredResults)
+        assertTrue("hasActiveFilters should be true", successState.hasActiveFilters)
+        assertEquals(0, successState.filteredFilms.size)
+        assertEquals(2, successState.films.size)
     }
 
     @Test
@@ -89,22 +140,6 @@ class FilmListViewModelTest {
         assertEquals("Spirited", state.searchQuery)
         assertEquals(1, state.filteredFilms.size)
         assertEquals("Spirited Away", state.filteredFilms[0].title)
-    }
-
-    @Test
-    fun emptySearchResultsShouldGiveEmptyNotSuccessWithEmptyList() = runTest {
-        coEvery { repository.getAllFilms() } returns flowOf(sampleFilms)
-        coEvery { repository.refreshFilms() } returns Result.success(Unit)
-
-        viewModel = FilmListViewModel(repository)
-        advanceUntilIdle()
-
-        viewModel.updateSearchQuery("NonExistentFilm")
-
-        val state = viewModel.uiState.value as FilmListUiState.Success
-        assertFalse(state.hasFilteredResults)
-        assertTrue(state.hasActiveFilters)
-        assertEquals(0, state.filteredFilms.size)
     }
 
     @Test
@@ -141,7 +176,7 @@ class FilmListViewModelTest {
     }
 
     @Test
-    fun showFiltersShouldToggleFilterVisibility() = runTest {
+    fun toggleFiltersShouldSwitchFilterVisibility() = runTest {
         coEvery { repository.getAllFilms() } returns flowOf(sampleFilms)
         coEvery { repository.refreshFilms() } returns Result.success(Unit)
 
@@ -149,11 +184,46 @@ class FilmListViewModelTest {
         advanceUntilIdle()
 
         assertFalse((viewModel.uiState.value as FilmListUiState.Success).showFilters)
-
         viewModel.toggleFilters()
         assertTrue((viewModel.uiState.value as FilmListUiState.Success).showFilters)
-
         viewModel.toggleFilters()
         assertFalse((viewModel.uiState.value as FilmListUiState.Success).showFilters)
+    }
+
+    @Test
+    fun retryAfterErrorShouldTransitionLoadingAndReloadSuccessfully() = runTest {
+        val dbFlow = MutableStateFlow<List<Film>>(emptyList())
+
+        coEvery { repository.getAllFilms() } returns dbFlow
+        coEvery { repository.refreshFilms() } returnsMany listOf(
+            Result.failure(IOException("Network error")),
+            Result.success(Unit)
+        )
+
+        viewModel = FilmListViewModel(repository)
+        advanceUntilIdle()
+
+        assertTrue(
+            "Expected Error after failed refresh, got: ${viewModel.uiState.value::class.simpleName}",
+            viewModel.uiState.value is FilmListUiState.Error
+        )
+        dbFlow.value = sampleFilms
+
+        viewModel.retry()
+        assertTrue(
+            "retry() must transition to Loading immediately",
+            viewModel.uiState.value is FilmListUiState.Loading
+        )
+
+        advanceUntilIdle()
+
+        coVerify(exactly = 2) { repository.refreshFilms() }
+
+        val finalState = viewModel.uiState.value
+        assertTrue(
+            "Expected Success after retry, got: ${finalState::class.simpleName}",
+            finalState is FilmListUiState.Success
+        )
+        assertEquals(2, (finalState as FilmListUiState.Success).films.size)
     }
 }
