@@ -1,89 +1,180 @@
 package com.example.ghiblifilms4hw.ui.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import com.example.ghiblifilms4hw.MainDispatcherRule
 import com.example.ghiblifilms4hw.data.Repository
+import com.example.ghiblifilms4hw.data.remote.FilmDto
+import com.example.ghiblifilms4hw.model.Film
 import com.example.ghiblifilms4hw.ui.state.FilmDetailUiState
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
-import javax.inject.Inject
+import io.mockk.MockKAnnotations
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.impl.annotations.MockK
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.Assert.*
 
-@HiltViewModel
-class FilmDetailViewModel @Inject constructor(
-    private val repository: Repository,
-    savedStateHandle: SavedStateHandle
-) : ViewModel() {
+class FilmDetailViewModelTest {
 
-    private val filmId: String = savedStateHandle["filmId"] ?: ""
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
-    private val _uiState = MutableStateFlow<FilmDetailUiState>(FilmDetailUiState.Loading)
-    val uiState: StateFlow<FilmDetailUiState> = _uiState
+    @MockK
+    private lateinit var repository: Repository
 
-    private var loadJob: Job? = null
+    private lateinit var viewModel: FilmDetailViewModel
 
-    init {
-        loadFilmDetail()
-    }
-    fun loadFilmDetail() {
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-            try {
-                _uiState.value = FilmDetailUiState.Loading
+    private val sampleFilm = Film(
+        id = "1",
+        title = "Spirited Away",
+        description = "Great film",
+        director = "Hayao Miyazaki",
+        isFavorite = false
+    )
 
-                val filmFromDb = repository.getFilmById(filmId)
-                if (filmFromDb != null) {
-                    _uiState.value = FilmDetailUiState.Success(filmFromDb)
-                } else {
-                    try {
-                        val filmFromApi = repository.getFilmFromApiById(filmId)
-                        if (filmFromApi != null) {
-                            repository.saveFilmToCache(filmFromApi)
-                            val savedFilm = repository.getFilmById(filmId)
-                            if (savedFilm != null) {
-                                _uiState.value = FilmDetailUiState.Success(savedFilm)
-                            } else {
-                                _uiState.value = FilmDetailUiState.Error("Failed to save film")
-                            }
-                        } else {
-                            _uiState.value = FilmDetailUiState.Error("Film not found")
-                        }
-                    } catch (apiException: Exception) {
-                        _uiState.value = FilmDetailUiState.Error(
-                            apiException.message ?: "Could not load film"
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.value = FilmDetailUiState.Error(
-                    e.message ?: "An error occurred"
-                )
-            }
-        }
+    private val sampleFilmDto = FilmDto(
+        id = "1",
+        title = "Spirited Away",
+        description = "Great film",
+        director = "Hayao Miyazaki",
+        producer = "Toshio Suzuki",
+        releaseDate = "2001",
+        rtScore = "97",
+        image = "url"
+    )
+
+    private fun savedStateHandle(filmId: String = "1") =
+        SavedStateHandle(mapOf("filmId" to filmId))
+
+    @Before
+    fun setup() {
+        MockKAnnotations.init(this)
     }
 
-    fun toggleFavorite() {
-        val currentState = _uiState.value as? FilmDetailUiState.Success ?: return
-        viewModelScope.launch {
-            try {
-                repository.toggleFavorite(filmId)
-                val updatedFilm = repository.getFilmById(filmId)
-                if (updatedFilm != null) {
-                    _uiState.value = FilmDetailUiState.Success(updatedFilm)
-                }
-            } catch (e: Exception) {
-                _uiState.value = FilmDetailUiState.Error(
-                    e.message ?: "Failed to update favourite"
-                )
-            }
-        }
+    @Test
+    fun initialStateIsLoading() = runTest {
+        coEvery { repository.getFilmById("1") } returns sampleFilm
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle())
+
+        assertTrue(
+            "State must be Loading immediately after construction",
+            viewModel.uiState is FilmDetailUiState.Loading
+        )
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        loadJob?.cancel()
+    @Test
+    fun filmFoundInDbProducesSuccessState() = runTest {
+        coEvery { repository.getFilmById("1") } returns sampleFilm
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle())
+        advanceUntilIdle()
+
+        val state = viewModel.uiState
+        assertTrue(
+            "Expected Success when film is in DB, got: ${state::class.simpleName}",
+            state is FilmDetailUiState.Success
+        )
+        assertEquals("Spirited Away", (state as FilmDetailUiState.Success).film.title)
+    }
+
+    @Test
+    fun filmNotInDbFetchedFromApiAndCachedProducesSuccessState() = runTest {
+        coEvery { repository.getFilmById("1") } returnsMany listOf(null, sampleFilm)
+        coEvery { repository.getFilmFromApiById("1") } returns sampleFilmDto
+        coEvery { repository.saveFilmToCache(sampleFilmDto) } returns Result.success(Unit)
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle())
+        advanceUntilIdle()
+
+        val state = viewModel.uiState
+        assertTrue(
+            "Expected Success after API fetch and cache, got: ${state::class.simpleName}",
+            state is FilmDetailUiState.Success
+        )
+        coVerify(exactly = 1) { repository.saveFilmToCache(sampleFilmDto) }
+    }
+
+    @Test
+    fun filmNotInDbAndNotFoundInApiProducesErrorState() = runTest {
+        coEvery { repository.getFilmById("1") } returns null
+        coEvery { repository.getFilmFromApiById("1") } returns null
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle())
+        advanceUntilIdle()
+
+        val state = viewModel.uiState
+        assertTrue(
+            "Expected Error when film not found anywhere, got: ${state::class.simpleName}",
+            state is FilmDetailUiState.Error
+        )
+        assertEquals("Film not found", (state as FilmDetailUiState.Error).message)
+    }
+
+    @Test
+    fun apiErrorProducesErrorState() = runTest {
+        coEvery { repository.getFilmById("1") } returns null
+        coEvery { repository.getFilmFromApiById("1") } throws RuntimeException("Network error")
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle())
+        advanceUntilIdle()
+
+        val state = viewModel.uiState
+        assertTrue(
+            "Expected Error on API exception, got: ${state::class.simpleName}",
+            state is FilmDetailUiState.Error
+        )
+        assertEquals("Network error", (state as FilmDetailUiState.Error).message)
+    }
+
+    @Test
+    fun toggleFavoriteUpdatesFilmState() = runTest {
+        val updatedFilm = sampleFilm.copy(isFavorite = true)
+        coEvery { repository.getFilmById("1") } returnsMany listOf(sampleFilm, updatedFilm)
+        coEvery { repository.toggleFavorite("1") } returns Result.success(Unit)
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle())
+        advanceUntilIdle()
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState as FilmDetailUiState.Success
+        assertTrue("Film should be marked as favourite", state.film.isFavorite)
+        coVerify(exactly = 1) { repository.toggleFavorite("1") }
+    }
+
+    @Test
+    fun toggleFavoriteOnNonSuccessStateDoesNothing() = runTest {
+        coEvery { repository.getFilmById("1") } returns null
+        coEvery { repository.getFilmFromApiById("1") } returns null
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle())
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState is FilmDetailUiState.Error)
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { repository.toggleFavorite(any()) }
+    }
+
+    @Test
+    fun missingFilmIdProducesErrorState() = runTest {
+        coEvery { repository.getFilmById("") } returns null
+        coEvery { repository.getFilmFromApiById("") } returns null
+
+        viewModel = FilmDetailViewModel(repository, savedStateHandle(filmId = ""))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState
+        assertTrue(
+            "Expected Error for missing filmId, got: ${state::class.simpleName}",
+            state is FilmDetailUiState.Error
+        )
     }
 }

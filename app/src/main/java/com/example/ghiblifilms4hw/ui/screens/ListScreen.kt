@@ -30,13 +30,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.ghiblifilms4hw.model.Film
@@ -49,7 +47,7 @@ fun ListScreen(
     navController: NavController,
     viewModel: FilmListViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState = viewModel.uiState
 
     Scaffold(
         topBar = {
@@ -64,17 +62,11 @@ fun ListScreen(
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .padding(16.dp)
+            modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp)
         ) {
             when (val state = uiState) {
                 is FilmListUiState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()
                             Spacer(modifier = Modifier.height(16.dp))
@@ -83,36 +75,23 @@ fun ListScreen(
                     }
                 }
                 is FilmListUiState.Error -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Error: ${state.message}",
-                                color = MaterialTheme.colorScheme.error
-                            )
+                            Text("Error: ${state.message}", color = MaterialTheme.colorScheme.error)
                             Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { viewModel.retry() }) {
-                                Text("Retry")
-                            }
+                            Button(onClick = { viewModel.retry() }) { Text("Retry") }
                         }
                     }
                 }
                 is FilmListUiState.Empty -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No films available")
                     }
                 }
                 is FilmListUiState.Success -> {
                     SuccessContent(
                         uiState = state,
-                        onFilmClick = { filmId ->
-                            navController.navigate("detail/$filmId")
-                        },
+                        onFilmClick = { navController.navigate("detail/$it") },
                         onSearchChange = { viewModel.updateSearchQuery(it) },
                         onDirectorFilterChange = { viewModel.updateDirectorFilter(it) },
                         onToggleFilters = { viewModel.toggleFilters() },
@@ -142,43 +121,25 @@ private fun SuccessContent(
         label = { Text("Search...") },
         singleLine = true
     )
-
-    Button(
-        onClick = onToggleFilters,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Button(onClick = onToggleFilters, modifier = Modifier.fillMaxWidth()) {
         Text(if (uiState.showFilters) "Hide Filters" else "Show Filters")
     }
-
     if (uiState.showFilters) {
         Column {
             Text("Filter by Director:", fontWeight = FontWeight.Medium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
-                    FilterChip(
-                        selected = uiState.selectedDirector == null,
-                        onClick = { onDirectorFilterChange(null) },
-                        label = { Text("All") }
-                    )
+                    FilterChip(selected = uiState.selectedDirector == null, onClick = { onDirectorFilterChange(null) }, label = { Text("All") })
                 }
                 items(uiState.availableDirectors) { director ->
-                    FilterChip(
-                        selected = uiState.selectedDirector == director,
-                        onClick = { onDirectorFilterChange(director) },
-                        label = { Text(director) }
-                    )
+                    FilterChip(selected = uiState.selectedDirector == director, onClick = { onDirectorFilterChange(director) }, label = { Text(director) })
                 }
             }
         }
     }
-
     Spacer(modifier = Modifier.height(8.dp))
-
     if (!uiState.hasFilteredResults) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("No results found")
                 if (uiState.hasActiveFilters) {
@@ -190,62 +151,23 @@ private fun SuccessContent(
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(uiState.filteredFilms, key = { it.id }) { film ->
-                FilmCard(
-                    film = film,
-                    onClick = { onFilmClick(film.id) },
-                    onFavoriteClick = { onFavoriteClick(film.id) }
-                )
+                FilmCard(film = film, onClick = { onFilmClick(film.id) }, onFavoriteClick = { onFavoriteClick(film.id) })
             }
         }
     }
 }
 
 @Composable
-private fun FilmCard(
-    film: Film,
-    onClick: () -> Unit,
-    onFavoriteClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            AsyncImage(
-                model = film.image,
-                contentDescription = film.title,
-                modifier = Modifier
-                    .size(80.dp)
-                    .padding(4.dp)
-            )
-
+private fun FilmCard(film: Film, onClick: () -> Unit, onFavoriteClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
+        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AsyncImage(model = film.image, contentDescription = film.title, modifier = Modifier.size(80.dp).padding(4.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = film.title,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "Director: ${film.director ?: "Unknown"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Year: ${film.releaseDate ?: "N/A"}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    text = "Score: ${film.rtScore ?: "N/A"}",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text(film.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Director: ${film.director ?: "Unknown"}", style = MaterialTheme.typography.bodySmall)
+                Text("Year: ${film.releaseDate ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+                Text("Score: ${film.rtScore ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
             }
-
             IconButton(onClick = onFavoriteClick) {
                 Icon(
                     imageVector = if (film.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,

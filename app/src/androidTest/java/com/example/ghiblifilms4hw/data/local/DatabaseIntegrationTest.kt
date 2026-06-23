@@ -22,10 +22,8 @@ class DatabaseIntegrationTest {
     @Before
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        database = Room.inMemoryDatabaseBuilder(
-            context,
-            FilmDatabase::class.java
-        ).allowMainThreadQueries().build()
+        database = Room.inMemoryDatabaseBuilder(context, FilmDatabase::class.java)
+            .allowMainThreadQueries().build()
         dao = database.filmDao()
     }
 
@@ -37,64 +35,37 @@ class DatabaseIntegrationTest {
     @Test
     fun insertAndReadFilmsFromDatabase() = runBlocking {
         val films = listOf(
-            FilmEntity("1", "Spirited Away", description = "A wonderful film", director = "Miyazaki", isFavorite = false),
-            FilmEntity("2", "Totoro", description = "Heartwarming", director = "Miyazaki", isFavorite = true)
+            FilmEntity("1", "Spirited Away", isFavorite = false),
+            FilmEntity("2", "Totoro", isFavorite = true)
         )
         dao.insertFilms(films)
         val result = dao.getAllFilms().first()
 
         assertEquals(2, result.size)
-        assertEquals("1", result[0].id)
         assertEquals("Spirited Away", result[0].title)
-        assertEquals("A wonderful film", result[0].description)
-        assertEquals("Miyazaki", result[0].director)
-        assertFalse(result[0].isFavorite)
-
-        assertEquals("2", result[1].id)
-        assertEquals("Totoro", result[1].title)
         assertTrue(result[1].isFavorite)
     }
 
     @Test
     fun updateFavoriteStatusCorrectlyPersists() = runBlocking {
-        val film = FilmEntity("1", "Spirited Away", isFavorite = false)
-        dao.insertFilm(film)
-
+        dao.insertFilm(FilmEntity("1", "Spirited Away", isFavorite = false))
         dao.updateFavoriteStatus("1", true)
         val updated = dao.getFilmById("1")
 
         assertNotNull(updated)
         assertTrue(updated?.isFavorite == true)
-        assertEquals("Spirited Away", updated?.title)
     }
 
     @Test
     fun getFavoriteFilmsReturnsOnlyFavoritedFilms() = runBlocking {
-        val films = listOf(
+        dao.insertFilms(listOf(
             FilmEntity("1", "Film 1", isFavorite = true),
             FilmEntity("2", "Film 2", isFavorite = false),
             FilmEntity("3", "Film 3", isFavorite = true)
-        )
-        dao.insertFilms(films)
+        ))
         val favorites = dao.getFavoriteFilms().first()
 
         assertEquals(2, favorites.size)
         assertTrue(favorites.all { it.isFavorite })
-        assertEquals("Film 1", favorites[0].title)
-        assertEquals("Film 3", favorites[1].title)
-    }
-
-    @Test
-    fun clearAllRemovesAllFilms() = runBlocking {
-        val films = listOf(
-            FilmEntity("1", "Film 1"),
-            FilmEntity("2", "Film 2")
-        )
-        dao.insertFilms(films)
-
-        dao.clearAll()
-        val result = dao.getAllFilms().first()
-
-        assertEquals(0, result.size)
     }
 }

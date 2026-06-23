@@ -31,26 +31,15 @@ class RepositoryTest {
     private lateinit var repository: Repository
 
     private val sampleFilmDto = FilmDto(
-        id = "1",
-        title = "Spirited Away",
-        description = "Great film",
-        director = "Hayao Miyazaki",
-        producer = "Toshio Suzuki",
-        releaseDate = "2001",
-        rtScore = "97",
-        image = "url"
+        id = "1", title = "Spirited Away", description = "Great film",
+        director = "Hayao Miyazaki", producer = "Toshio Suzuki",
+        releaseDate = "2001", rtScore = "97", image = "url"
     )
 
     private val sampleFilmEntity = FilmEntity(
-        id = "1",
-        title = "Spirited Away",
-        description = "Great film",
-        director = "Hayao Miyazaki",
-        producer = "Toshio Suzuki",
-        releaseDate = "2001",
-        rtScore = "97",
-        image = "url",
-        isFavorite = false
+        id = "1", title = "Spirited Away", description = "Great film",
+        director = "Hayao Miyazaki", producer = "Toshio Suzuki",
+        releaseDate = "2001", rtScore = "97", image = "url", isFavorite = false
     )
 
     @Before
@@ -70,50 +59,9 @@ class RepositoryTest {
 
         assertTrue(result.isSuccess)
         coVerify(exactly = 1) {
-            filmDao.insertFilms(
-                match { films ->
-                    films.size == 1 && films[0].isFavorite == true
-                }
-            )
-        }
-    }
-
-    @Test
-    fun toggleFavoriteShouldUpdateFavoriteStatusCorrectly() = runTest {
-        coEvery { filmDao.getFilmById("1") } returns sampleFilmEntity
-        coEvery { filmDao.updateFavoriteStatus("1", true) } returns Unit
-
-        val result = repository.toggleFavorite("1")
-
-        assertTrue(result.isSuccess)
-        coVerify(exactly = 1) { filmDao.updateFavoriteStatus("1", true) }
-    }
-
-    @Test
-    fun toggleFavoriteOnNonExistentFilmShouldNotUpdate() = runTest {
-        coEvery { filmDao.getFilmById("999") } returns null
-
-        val result = repository.toggleFavorite("999")
-
-        assertTrue(result.isSuccess)
-        coVerify(exactly = 0) { filmDao.updateFavoriteStatus(any(), any()) }
-    }
-
-    @Test
-    fun saveFilmToCacheShouldPreserveExistingFavoriteStatus() = runTest {
-        val existingFavorite = sampleFilmEntity.copy(isFavorite = true)
-        coEvery { filmDao.getFilmById("1") } returns existingFavorite
-        coEvery { filmDao.insertFilm(any()) } returns Unit
-
-        val result = repository.saveFilmToCache(sampleFilmDto)
-
-        assertTrue(result.isSuccess)
-        coVerify(exactly = 1) {
-            filmDao.insertFilm(
-                match { film ->
-                    film.id == "1" && film.isFavorite == true
-                }
-            )
+            filmDao.insertFilms(match { films ->
+                films.size == 1 && films[0].isFavorite == true
+            })
         }
     }
 

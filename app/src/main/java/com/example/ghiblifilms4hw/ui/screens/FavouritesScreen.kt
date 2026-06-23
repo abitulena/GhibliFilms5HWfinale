@@ -28,13 +28,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.ghiblifilms4hw.model.Film
@@ -47,7 +45,7 @@ fun FavouritesScreen(
     navController: NavController,
     viewModel: FavouritesViewModel = hiltViewModel()
 ) {
-    val uiStateValue by viewModel.uiState.collectAsStateWithLifecycle(initialValue = FavouritesUiState.Loading)
+    val uiState = viewModel.uiState
 
     Scaffold(
         topBar = {
@@ -61,17 +59,10 @@ fun FavouritesScreen(
             )
         }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when (val state = uiStateValue) {
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            when (val state = uiState) {
                 is FavouritesUiState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
@@ -81,14 +72,9 @@ fun FavouritesScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(
-                            text = "No favourite films yet",
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Text("No favourite films yet", style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { navController.popBackStack() }) {
-                            Text("Go back to films")
-                        }
+                        Button(onClick = { navController.popBackStack() }) { Text("Go back to films") }
                     }
                 }
                 is FavouritesUiState.Success -> {
@@ -97,10 +83,7 @@ fun FavouritesScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(
-                            items = state.films,
-                            key = { it.id }
-                        ) { film ->
+                        items(items = state.films, key = { it.id }) { film ->
                             FavouriteCard(
                                 film = film,
                                 onClick = { navController.navigate("detail/${film.id}") },
@@ -115,15 +98,9 @@ fun FavouritesScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(
-                            text = "Error: ${state.message}",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        Text("Error: ${state.message}", color = MaterialTheme.colorScheme.error)
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadFavourites() }) {
-                            Text("Retry")
-                        }
+                        Button(onClick = { viewModel.loadFavourites() }) { Text("Retry") }
                     }
                 }
             }
@@ -132,62 +109,25 @@ fun FavouritesScreen(
 }
 
 @Composable
-private fun FavouriteCard(
-    film: Film,
-    onClick: () -> Unit,
-    onRemove: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
+private fun FavouriteCard(film: Film, onClick: () -> Unit, onRemove: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             AsyncImage(
                 model = film.image,
                 contentDescription = film.title,
-                modifier = Modifier
-                    .size(80.dp)
-                    .padding(4.dp)
+                modifier = Modifier.size(80.dp).padding(4.dp)
             )
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = film.title,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "Director: ${film.director ?: "Unknown"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Year: ${film.releaseDate ?: "N/A"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Score: ${film.rtScore ?: "N/A"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(film.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Director: ${film.director ?: "Unknown"}", style = MaterialTheme.typography.bodySmall)
+                Text("Year: ${film.releaseDate ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+                Text("Score: ${film.rtScore ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
             }
-
             IconButton(onClick = onRemove) {
-                Icon(
-                    imageVector = Icons.Default.Favorite,
-                    contentDescription = "Remove from favourites",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Favorite, contentDescription = "Remove from favourites", tint = MaterialTheme.colorScheme.primary)
             }
         }
     }

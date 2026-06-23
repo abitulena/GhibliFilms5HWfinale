@@ -31,8 +31,6 @@ class FavouritesViewModelTest {
         Film(id = "2", title = "Totoro", isFavorite = true)
     )
 
-    private val emptyList = emptyList<Film>()
-
     @Before
     fun setup() {
         MockKAnnotations.init(this)
@@ -45,7 +43,7 @@ class FavouritesViewModelTest {
         viewModel = FavouritesViewModel(repository)
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState
         assertTrue(state is FavouritesUiState.Success)
         if (state is FavouritesUiState.Success) {
             assertEquals(2, state.films.size)
@@ -55,13 +53,12 @@ class FavouritesViewModelTest {
 
     @Test
     fun loadFavouritesWhenEmptyReturnsEmpty() = runTest {
-        coEvery { repository.getFavoriteFilms() } returns flowOf(emptyList)
+        coEvery { repository.getFavoriteFilms() } returns flowOf(emptyList())
 
         viewModel = FavouritesViewModel(repository)
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
-        assertTrue(state is FavouritesUiState.Empty)
+        assertTrue(viewModel.uiState is FavouritesUiState.Empty)
     }
 
     @Test
@@ -72,7 +69,7 @@ class FavouritesViewModelTest {
         viewModel = FavouritesViewModel(repository)
         advanceUntilIdle()
 
-        val beforeState = viewModel.uiState.value as FavouritesUiState.Success
+        val beforeState = viewModel.uiState as FavouritesUiState.Success
         assertEquals(2, beforeState.films.size)
 
         val updatedList = listOf(favouriteFilms[1])
@@ -83,7 +80,7 @@ class FavouritesViewModelTest {
 
         coVerify(atLeast = 1) { repository.toggleFavorite("1") }
 
-        val afterState = viewModel.uiState.value as FavouritesUiState.Success
+        val afterState = viewModel.uiState as FavouritesUiState.Success
         assertEquals(1, afterState.films.size)
         assertEquals("Totoro", afterState.films[0].title)
     }

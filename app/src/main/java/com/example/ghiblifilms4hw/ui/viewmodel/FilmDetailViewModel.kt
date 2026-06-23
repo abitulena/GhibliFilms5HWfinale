@@ -1,13 +1,15 @@
 package com.example.ghiblifilms4hw.ui.viewmodel
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ghiblifilms4hw.data.Repository
 import com.example.ghiblifilms4hw.ui.state.FilmDetailUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,10 +21,10 @@ class FilmDetailViewModel @Inject constructor(
 
     private val filmId: String = savedStateHandle["filmId"] ?: ""
 
-    private val _uiState = MutableStateFlow<FilmDetailUiState>(FilmDetailUiState.Loading)
-    val uiState: StateFlow<FilmDetailUiState> = _uiState
+    var uiState by mutableStateOf<FilmDetailUiState>(FilmDetailUiState.Loading)
+        private set
 
-    private var loadJob: kotlinx.coroutines.Job? = null
+    private var loadJob: Job? = null
 
     init {
         loadFilmDetail()
@@ -31,51 +33,42 @@ class FilmDetailViewModel @Inject constructor(
     fun loadFilmDetail() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-
             try {
-                _uiState.value = FilmDetailUiState.Loading
+                uiState = FilmDetailUiState.Loading
                 val filmFromDb = repository.getFilmById(filmId)
                 if (filmFromDb != null) {
-                    _uiState.value =
-                        FilmDetailUiState.Success(filmFromDb)
+                    uiState = FilmDetailUiState.Success(filmFromDb)
                 } else {
-                    val filmFromApi =
-                        repository.getFilmFromApiById(filmId)
+                    val filmFromApi = repository.getFilmFromApiById(filmId)
                     if (filmFromApi != null) {
                         repository.saveFilmToCache(filmFromApi)
-                        val savedFilm =
-                            repository.getFilmById(filmId)
+                        val savedFilm = repository.getFilmById(filmId)
                         if (savedFilm != null) {
-                            _uiState.value =
-                                FilmDetailUiState.Success(savedFilm)
+                            uiState = FilmDetailUiState.Success(savedFilm)
                         } else {
-                            _uiState.value =
-                                FilmDetailUiState.Error(
-                                    "Failed to save film"
-                                )
+                            uiState = FilmDetailUiState.Error("Failed to save film")
                         }
                     } else {
-                        _uiState.value =
-                            FilmDetailUiState.Error(
-                                "Film not found"
-                            )
+                        uiState = FilmDetailUiState.Error("Film not found")
                     }
                 }
             } catch (e: Exception) {
-                _uiState.value =
-                    FilmDetailUiState.Error(
-                        e.message ?: "Unknown error"
-                    )
+                uiState = FilmDetailUiState.Error(e.message ?: "Unknown error")
             }
         }
     }
 
     fun toggleFavorite() {
+        val currentState = uiState as? FilmDetailUiState.Success ?: return
         viewModelScope.launch {
-            repository.toggleFavorite(filmId)
-            val updatedFilm = repository.getFilmById(filmId)
-            if (updatedFilm != null) {
-                _uiState.value = FilmDetailUiState.Success(updatedFilm)
+            try {
+                repository.toggleFavorite(filmId)
+                val updatedFilm = repository.getFilmById(filmId)
+                if (updatedFilm != null) {
+                    uiState = FilmDetailUiState.Success(updatedFilm)
+                }
+            } catch (e: Exception) {
+                uiState = FilmDetailUiState.Error(e.message ?: "Failed to update favourite")
             }
         }
     }
