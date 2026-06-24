@@ -5,7 +5,13 @@ import com.example.ghiblifilms4hw.data.local.FilmDao
 import com.example.ghiblifilms4hw.data.remote.FilmDto
 import com.example.ghiblifilms4hw.data.remote.GhibliApiService
 import com.example.ghiblifilms4hw.model.FilmEntity
+import com.example.ghiblifilms4hw.model.Film
+import kotlinx.coroutines.test.advanceUntilIdle
 import io.mockk.MockKAnnotations
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.impl.annotations.MockK
@@ -74,5 +80,41 @@ class RepositoryTest {
 
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is IOException)
+    }
+
+    @Test
+    fun getAllFilmsEmitsUpdatesInOrder() = runTest {
+        val channel = Channel<List<FilmEntity>>(Channel.UNLIMITED)
+        coEvery { filmDao.getAllFilms() } returns channel.consumeAsFlow()
+
+        val emissions = mutableListOf<List<Film>>()
+        val job = launch {
+            repository.getAllFilms().collect { emissions.add(it) }
+        }
+
+        channel.send(emptyList())
+        channel.send(listOf(sampleFilmEntity))
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(2, emissions.size)
+        assertTrue(emissions[0].isEmpty())
+        assertEquals("Spirited Away", emissions[1][0].title)
+        assertEquals("Hayao Miyazaki", emissions[1][0].director)
+    }
+
+    @Test
+    fun getAllFilmsMappsEntityToFilmCorrectly() = runTest {
+        val entityWithFavorite = sampleFilmEntity.copy(isFavorite = true)
+        coEvery { filmDao.getAllFilms() } returns flowOf(listOf(entityWithFavorite))
+
+        val result = repository.getAllFilms().first()
+
+        assertEquals(1, result.size)
+        val film = result[0]
+        assertEquals("1", film.id)
+        assertEquals("Spirited Away", film.title)
+        assertEquals("Hayao Miyazaki", film.director)
+        assertTrue(film.isFavorite)
     }
 }
