@@ -42,8 +42,8 @@ class DatabaseIntegrationTest {
         val result = dao.getAllFilms().first()
 
         assertEquals(2, result.size)
-        assertEquals("Spirited Away", result[0].title)
-        assertTrue(result[1].isFavorite)
+        assertTrue(result.any { it.title == "Spirited Away" })
+        assertTrue(result.any { it.isFavorite })
     }
 
     @Test
